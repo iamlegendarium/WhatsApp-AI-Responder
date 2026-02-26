@@ -11,7 +11,7 @@ const conversationHistory = new Map();
 const HISTORY_LIMIT = 5; // last N exchanges
 
 // List of contacts to exclude
-const EXCLUDED_CONTACTS = ["2348118870050@s.whatsapp.net"];
+const EXCLUDED_CONTACTS = ["234@s.whatsapp.net"];
 
 async function startWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState("dev_auth_info");
