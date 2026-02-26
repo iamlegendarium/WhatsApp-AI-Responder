@@ -1,7 +1,12 @@
 
-const { makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys");
+const {
+  makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+} = require("@whiskeysockets/baileys");
 const qrcode = require("qrcode-terminal");
 const fetch = require("node-fetch");
+
 // Keep conversation history per contact
 const conversationHistory = new Map();
 const HISTORY_LIMIT = 5; // last N exchanges
@@ -12,22 +17,37 @@ const EXCLUDED_CONTACTS = ["2348118870050@s.whatsapp.net"];
 async function startWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState("dev_auth_info");
 
+  // Fetch the latest WA Web version dynamically
+  const { version } = await fetchLatestBaileysVersion();
+  console.log("Using WA version:", version);
+
   const sock = makeWASocket({
+    version,
     auth: state,
-    browser: ["Mac OS", "Chrome", "14.4.1"],
+    browser: ["Ubuntu", "Chrome", "20.0.0"],
   });
 
   sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on("connection.update", ({ connection, qr }) => {
+  sock.ev.on("connection.update", ({ connection, qr, lastDisconnect }) => {
     if (qr) {
-      console.log("Developer Bot is running... scan QR:");
+      console.log("Scan this QR code with WhatsApp:");
       qrcode.generate(qr, { small: true });
     }
     if (connection === "open") console.log("WhatsApp connected!");
     if (connection === "close") {
-      console.log("Connection closed. Reconnecting...");
-      startWhatsApp();
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !== 401;
+      console.log(
+        "Connection closed. Reason:",
+        lastDisconnect?.error?.message || "unknown"
+      );
+      if (shouldReconnect) {
+        console.log("Reconnecting...");
+        startWhatsApp();
+      } else {
+        console.log("Logged out. Please delete dev_auth_info and restart.");
+      }
     }
   });
 
@@ -50,9 +70,12 @@ async function startWhatsApp() {
     let text = "";
     let isSticker = false;
     if (msg.message.conversation) text = msg.message.conversation;
-    else if (msg.message.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
-    else if (msg.message.imageMessage?.caption) text = msg.message.imageMessage.caption;
-    else if (msg.message.videoMessage?.caption) text = msg.message.videoMessage.caption;
+    else if (msg.message.extendedTextMessage?.text)
+      text = msg.message.extendedTextMessage.text;
+    else if (msg.message.imageMessage?.caption)
+      text = msg.message.imageMessage.caption;
+    else if (msg.message.videoMessage?.caption)
+      text = msg.message.videoMessage.caption;
     else if (msg.message.stickerMessage) {
       text = "[Sticker received]";
       isSticker = true;
@@ -61,7 +84,7 @@ async function startWhatsApp() {
     if (!text.trim()) return;
 
     const now = Date.now();
-    if (lastMsg.has(sender) && now - lastMsg.get(sender) < 2000) return; // prevent spam
+    if (lastMsg.has(sender) && now - lastMsg.get(sender) < 2000) return;
     lastMsg.set(sender, now);
 
     console.log(`Message from ${sender}: ${text}`);
@@ -72,7 +95,7 @@ async function startWhatsApp() {
 
     // Add new user message
     history.push(`User: ${text}`);
-    if (history.length > HISTORY_LIMIT * 2) history.shift(); // keep last N exchanges
+    if (history.length > HISTORY_LIMIT * 2) history.shift();
 
     // Build prompt for Ollama
     let promptText;
@@ -87,10 +110,10 @@ async function startWhatsApp() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "llama3.2:latest",
+          model: "qwen2.5-coder:latest",
           prompt: promptText,
           max_tokens: 200,
-          stream: true
+          stream: true,
         }),
       });
 
@@ -112,7 +135,6 @@ async function startWhatsApp() {
       conversationHistory.set(sender, history);
 
       await sock.sendMessage(sender, { text: aiReply });
-
     } catch (err) {
       console.error("Error talking to Ollama:", err);
       await sock.sendMessage(sender, {
