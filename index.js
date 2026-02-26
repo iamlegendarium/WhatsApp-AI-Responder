@@ -1,4 +1,3 @@
-
 const {
   makeWASocket,
   useMultiFileAuthState,
@@ -36,11 +35,10 @@ async function startWhatsApp() {
     }
     if (connection === "open") console.log("WhatsApp connected!");
     if (connection === "close") {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== 401;
+      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== 401;
       console.log(
         "Connection closed. Reason:",
-        lastDisconnect?.error?.message || "unknown"
+        lastDisconnect?.error?.message || "unknown",
       );
       if (shouldReconnect) {
         console.log("Reconnecting...");
@@ -110,7 +108,7 @@ async function startWhatsApp() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "qwen2.5-coder:latest",
+          model: "qwen2.5-coder:1.5b",
           prompt: promptText,
           max_tokens: 200,
           stream: true,
